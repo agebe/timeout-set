@@ -84,6 +84,8 @@ public class Producer {
 
   private void sendMessages(Instant i) {
     int sequence = counter % 3;
+//    sequence = 0;
+    log.info("doing sequence '{}'", sequence);
     switch(sequence) {
       case 0 -> {
         publish(1, i);

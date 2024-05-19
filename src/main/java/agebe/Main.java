@@ -13,6 +13,8 @@
  */
 package agebe;
 
+import java.util.Arrays;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,7 +23,7 @@ public class Main {
   private static final Logger log = LoggerFactory.getLogger(Main.class);
 
   public static void main(String[] args) {
-    log.info("start");
+    log.info("start with params '{}'", Arrays.toString(args));
     MessageService messages = new MessageService();
     messages.subscribe(new Subscriber());
     //messages.subscribe(m -> log.info("received '{}'", m));
