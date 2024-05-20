@@ -22,39 +22,44 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
+/**
+ * TimeoutSet can be used to collect a set of messages that belong together e.g. from Kafka and
+ * start processing after the set is complete or after a defined timeout
+ * @param <T>
+ */
 public class TimeoutSet<T> {
 
-  private Duration lastActivityTimeout;
+  private final Duration afterLastChangeTimeout;
 
-  private Duration afterCreationTimeout;
+  private final Duration afterCreationTimeout;
 
-  private Predicate<Set<T>> isSetCompletePredicate;
+  private final Predicate<Set<T>> isSetCompletePredicate;
 
-  private Set<T> set;
+  private final Set<T> set;
 
-  private Instant lastActivity;
+  private final Instant created = Instant.now();
 
-  private Instant created = Instant.now();
+  private final CompletableFuture<Set<T>> future;
 
-  private CompletableFuture<Set<T>> future;
+  private final ScheduledExecutorService scheduler;
 
-  private ScheduledExecutorService scheduler;
+  private Instant lastChange;
 
   private Instant completed;
 
   public TimeoutSet(
-      Duration lastActivityTimeout,
+      Duration afterLastChangeTimeout,
       ScheduledExecutorService scheduler) {
-    this(lastActivityTimeout, null, null, null, scheduler);
+    this(afterLastChangeTimeout, null, null, null, scheduler);
   }
 
   public TimeoutSet(
-      Duration lastActivityTimeout,
+      Duration afterLastChangeTimeout,
       Duration afterCreateTimeout,
       Predicate<Set<T>> isSetCompletePredicate,
       Set<T> set,
       ScheduledExecutorService scheduler) {
-    this.lastActivityTimeout = lastActivityTimeout;
+    this.afterLastChangeTimeout = afterLastChangeTimeout;
     this.afterCreationTimeout = afterCreateTimeout;
     this.isSetCompletePredicate = isSetCompletePredicate!=null?isSetCompletePredicate:s->false;
     this.set = set!=null?set:new HashSet<>();
@@ -77,14 +82,14 @@ public class TimeoutSet<T> {
     }
     set.add(e);
     Instant now = Instant.now();
-    lastActivity = now;
+    lastChange = now;
     if(!checkAndComplete(now)) {
-      if(lastActivityTimeout != null) {
-        // no need to re-schedule if checkAndComplete return false.
-        // a later call to add as already created another schedule
+      if(afterLastChangeTimeout != null) {
+        // no need to re-schedule if checkAndComplete returns false.
+        // a later call to add has already created another schedule in this case
         scheduler.schedule(
             (Runnable)this::checkAndComplete,
-            lastActivityTimeout.toNanos(),
+            afterLastChangeTimeout.toNanos(),
             TimeUnit.NANOSECONDS);
       }
     }
@@ -109,12 +114,12 @@ public class TimeoutSet<T> {
     return isTimeout(now) || isSetCompletePredicate.test(set);
   }
 
-  public synchronized boolean isLastActivityTimeout() {
-    return isLastActivityTimeout(Instant.now());
+  public synchronized boolean isLastChangeTimeout() {
+    return isAfterLastChangeTimeout(Instant.now());
   }
 
-  public synchronized boolean isLastActivityTimeout(Instant now) {
-    return isTimeout(now, lastActivity, lastActivityTimeout);
+  public synchronized boolean isAfterLastChangeTimeout(Instant now) {
+    return isTimeout(now, lastChange, afterLastChangeTimeout);
   }
 
   public synchronized boolean isAfterCreationTimeout() {
@@ -138,7 +143,7 @@ public class TimeoutSet<T> {
   }
 
   public synchronized boolean isTimeout(Instant now) {
-    return isLastActivityTimeout(now) || isAfterCreationTimeout(now);
+    return isAfterLastChangeTimeout(now) || isAfterCreationTimeout(now);
   }
 
   public CompletableFuture<Set<T>> getFuture() {
@@ -147,6 +152,34 @@ public class TimeoutSet<T> {
 
   public Instant getCompleted() {
     return completed;
+  }
+
+  public synchronized Set<T> getSet() {
+    return set;
+  }
+
+  public Duration getAfterLastChangeTimeout() {
+    return afterLastChangeTimeout;
+  }
+
+  public Duration getAfterCreationTimeout() {
+    return afterCreationTimeout;
+  }
+
+  public Predicate<Set<T>> getIsSetCompletePredicate() {
+    return isSetCompletePredicate;
+  }
+
+  public synchronized Instant getLastChange() {
+    return lastChange;
+  }
+
+  public Instant getCreated() {
+    return created;
+  }
+
+  public ScheduledExecutorService getScheduler() {
+    return scheduler;
   }
 
 }
