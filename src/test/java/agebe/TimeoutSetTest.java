@@ -19,6 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -32,6 +35,8 @@ public class TimeoutSetTest {
 
   private static record Msg(int id) {};
 
+  private static record Job(String id, List<Msg> messages) {}
+
   private ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
   private void sleep(long millis) {
@@ -44,7 +49,7 @@ public class TimeoutSetTest {
 
   @Test
   void test() throws InterruptedException, ExecutionException, TimeoutException {
-    TimeoutSet<Msg> ts = new TimeoutSet<>(Duration.ofSeconds(1), scheduler);
+    TimeoutSet<Set<Msg>, Msg> ts = TimeoutSet.ofCollection(Duration.ofSeconds(1), null, null, new HashSet<>(), scheduler);
     ts.add(new Msg(1));
     Instant start = Instant.now();
     Set<Msg> set = ts.getFuture().get(10, TimeUnit.SECONDS);
@@ -56,7 +61,7 @@ public class TimeoutSetTest {
 
   @Test
   void test2() throws InterruptedException, ExecutionException, TimeoutException {
-    TimeoutSet<Msg> ts = new TimeoutSet<>(Duration.ofSeconds(1), scheduler);
+    TimeoutSet<List<Msg>, Msg> ts = TimeoutSet.ofCollection(Duration.ofSeconds(1), null, null, new ArrayList<>(), scheduler);
     Instant start = Instant.now();
     ts.add(new Msg(1));
     sleep(500);
@@ -65,7 +70,7 @@ public class TimeoutSetTest {
     ts.add(new Msg(3));
     sleep(500);
     ts.add(new Msg(4));
-    Set<Msg> set = ts.getFuture().get(10, TimeUnit.SECONDS);
+    List<Msg> set = ts.getFuture().get(10, TimeUnit.SECONDS);
     Instant end = Instant.now();
     assertTrue(end.toEpochMilli() - start.toEpochMilli() >= 2500);
     assertEquals(4, set.size());
@@ -74,7 +79,7 @@ public class TimeoutSetTest {
   @Test
   void afterCreationTest() throws InterruptedException, ExecutionException, TimeoutException {
     Instant start = Instant.now();
-    TimeoutSet<Msg> ts = new TimeoutSet<>(null, Duration.ofSeconds(1), null, null, scheduler);
+    TimeoutSet<Set<Msg>, Msg> ts = TimeoutSet.ofCollection(null, Duration.ofSeconds(1), null, new HashSet<>(), scheduler);
     Set<Msg> set = ts.getFuture().get(10, TimeUnit.SECONDS);
     Instant end = Instant.now();
     assertTrue(end.toEpochMilli() - start.toEpochMilli() >= 1000);
@@ -84,12 +89,34 @@ public class TimeoutSetTest {
   @Test
   void withSetCompletePredicateTest() throws InterruptedException, ExecutionException, TimeoutException {
     Instant start = Instant.now();
-    TimeoutSet<Msg> ts = new TimeoutSet<>(null, null, s -> s.size() == 1, null, scheduler);
+    TimeoutSet<Set<Msg>, Msg> ts = TimeoutSet.ofCollection(null, null, s -> s.size() == 1, new HashSet<>(), scheduler);
     ts.add(new Msg(1));
     Set<Msg> set = ts.getFuture().get(10, TimeUnit.SECONDS);
     Instant end = Instant.now();
     assertTrue(end.toEpochMilli() - start.toEpochMilli() < 1000);
     assertEquals(1, set.size());
+  }
+
+  @Test
+  void withCustomJobType() throws InterruptedException, ExecutionException, TimeoutException {
+    Instant start = Instant.now();
+    TimeoutSet<Job, Msg> ts = new TimeoutSet<>(
+        Duration.ofSeconds(1),
+        null,
+        null,
+        new Job("myId", new ArrayList<>()),
+        scheduler) {
+      @Override
+      protected void addElementToSet(Job j, Msg element) {
+        j.messages.add(element);
+      }
+    };
+    ts.add(new Msg(1));
+    Job job = ts.getFuture().get(10, TimeUnit.SECONDS);
+    Instant end = Instant.now();
+    assertTrue(end.toEpochMilli() - start.toEpochMilli() >= 1000);
+    assertEquals(1, job.messages.size());
+    assertEquals("myId", job.id());
   }
 
 }

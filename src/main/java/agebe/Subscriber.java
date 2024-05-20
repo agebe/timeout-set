@@ -16,6 +16,7 @@ package agebe;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -36,12 +37,12 @@ public class Subscriber implements Consumer<Message> {
     return new Thread(r, "scheduler");
   });
 
-  private Map<Instant, TimeoutSet<Message>> sets = new HashMap<>();
+  private Map<Instant, TimeoutSet<Set<Message>, Message>> sets = new HashMap<>();
 
   @Override
   public synchronized void accept(Message m) {
     log.info("received '{}'", m);
-    TimeoutSet<Message> set = sets.computeIfAbsent(
+    TimeoutSet<Set<Message>, Message> set = sets.computeIfAbsent(
         m.timestamp(),
         this::newTimeoutSet);
     try {
@@ -51,8 +52,13 @@ public class Subscriber implements Consumer<Message> {
     }
   }
 
-  private TimeoutSet<Message> newTimeoutSet(Instant key) {
-    TimeoutSet<Message> ts = new TimeoutSet<Message>(Duration.ofMillis(1500), null, this::isSetComplete, null, scheduler);
+  private TimeoutSet<Set<Message>, Message> newTimeoutSet(Instant key) {
+    TimeoutSet<Set<Message>, Message> ts = TimeoutSet.ofCollection(
+        Duration.ofMillis(1500),
+        null,
+        this::isSetComplete,
+        new HashSet<>(),
+        scheduler);
     ts.getFuture().whenCompleteAsync((r,e) -> process(r,e,key), ForkJoinPool.commonPool());
     return ts;
   }

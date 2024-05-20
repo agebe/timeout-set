@@ -84,7 +84,8 @@ public class Producer {
 
   private void sendMessages(Instant i) {
     int sequence = counter % 3;
-//    sequence = 0;
+    // sequence 2 should show exceptions on the subscriber side in the logs as the 2 second between the messages is
+    // longer than the timeout on the TimeoutSet (1.5 seconds)
     log.info("doing sequence '{}'", sequence);
     switch(sequence) {
       case 0 -> {
